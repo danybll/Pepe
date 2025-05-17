@@ -125,11 +125,13 @@
                 scene.add(model);
 
                 // Añadir todos los meshes a la lista de colisiones
-                model.traverse(function(child) {
-                    if (child.isMesh) {
-                        collisionObjects.push(child);
-                    }
-                });
+// Recorrer modelo y generar colliders desde objetos que inician con 'Collider_'
+              model.traverse(child => {
+              if (child.isMesh && child.name.startsWith("Collider_")) {
+              const box = new THREE.Box3().setFromObject(child);
+              collisionBoxes.push(box);
+                 }
+              });
 
                 console.log('Modelo cargado y objetos de colisión registrados:', collisionObjects);
             },
