@@ -45,180 +45,192 @@
             cursor: pointer;
             margin-top: 20px;
         }
-        #instructions button:hover { background-color: #45a049; }
+        #instructions button:hover {
+            background-color: #45a049;
+        }
     </style>
 </head>
 <body>
-    <div id="info">VR Study Room - Haz clic para comenzar</div>
-    <div id="blocker">
-        <div id="instructions">
-            <h1>VR Study Room</h1>
-            <p>Bienvenido a tu escenario de estudio en realidad virtual.</p>
-            <p>Controles:</p>
-            <ul style="text-align: left; display: inline-block;">
-                <li>WASD: Movimiento</li>
-                <li>Ratón: Mirar alrededor</li>
-                <li>Click izquierdo: Activar controles</li>
-                <li>ESC: Salir de los controles</li>
-            </ul>
-            <button id="startButton">Comenzar Experiencia</button>
-        </div>
+<div id="info">VR Study Room - Haz clic para comenzar</div>
+<div id="blocker">
+    <div id="instructions">
+        <h1>VR Study Room</h1>
+        <p>Bienvenido a tu escenario de estudio en realidad virtual.</p>
+        <p>Controles:</p>
+        <ul style="text-align: left; display: inline-block;">
+            <li>WASD: Movimiento</li>
+            <li>Ratón: Mirar alrededor</li>
+            <li>Click izquierdo: Activar controles</li>
+            <li>ESC: Salir de los controles</li>
+        </ul>
+        <button id="startButton">Comenzar Experiencia</button>
     </div>
+</div>
 
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/PointerLockControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/PointerLockControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
 
-    <script>
-        let camera, scene, renderer, controls, model;
-        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false, canJump = false;
-        const velocity = new THREE.Vector3();
-        const direction = new THREE.Vector3();
+<script>
+    let camera, scene, renderer, controls, model;
+    let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false, canJump = false;
+    const velocity = new THREE.Vector3();
+    const direction = new THREE.Vector3();
+    const collisionObjects = [];
 
-        // Colisiones
-        const collisionBoxes = [];
-        let playerBox;
+    init();
+    animate();
 
-        init();
-        animate();
+    function init() {
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.y = 1.6;
 
-        function init() {
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.y = 1.6;
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x000000);
+        scene.fog = new THREE.FogExp2(0x000000, 0.001);
 
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x000000);
-            scene.fog = new THREE.FogExp2(0x000000, 0.001);
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
 
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            document.body.appendChild(renderer.domElement);
+        controls = new THREE.PointerLockControls(camera, document.body);
 
-            controls = new THREE.PointerLockControls(camera, document.body);
+        const blocker = document.getElementById('blocker');
+        const instructions = document.getElementById('instructions');
+        const startButton = document.getElementById('startButton');
 
-            const blocker = document.getElementById('blocker');
-            const instructions = document.getElementById('instructions');
-            const startButton = document.getElementById('startButton');
+        startButton.addEventListener('click', function() {
+            controls.lock();
+        });
 
-            startButton.addEventListener('click', () => controls.lock());
+        controls.addEventListener('lock', function() {
+            instructions.style.display = 'none';
+            blocker.style.display = 'none';
+        });
 
-            controls.addEventListener('lock', () => {
-                instructions.style.display = 'none';
-                blocker.style.display = 'none';
-            });
+        controls.addEventListener('unlock', function() {
+            blocker.style.display = 'block';
+            instructions.style.display = '';
+        });
 
-            controls.addEventListener('unlock', () => {
-                blocker.style.display = 'block';
-                instructions.style.display = '';
-            });
+        document.addEventListener('keydown', onKeyDown);
+        document.addEventListener('keyup', onKeyUp);
 
-            document.addEventListener('keydown', onKeyDown);
-            document.addEventListener('keyup', onKeyUp);
-
-            const loader = new THREE.GLTFLoader();
-            loader.load('vr_new_study_room.glb', gltf => {
+        const loader = new THREE.GLTFLoader();
+        loader.load(
+            'vr_new_study_room.glb',
+            function(gltf) {
                 model = gltf.scene;
                 scene.add(model);
-                model.position.set(0, 0, 0);
 
-                model.traverse(child => {
+                // Añadir todos los meshes a la lista de colisiones
+                model.traverse(function(child) {
                     if (child.isMesh) {
-                        console.log('Colisionable:', child.name);
-                        const box = new THREE.Box3().setFromObject(child);
-                        collisionBoxes.push(box);
+                        collisionObjects.push(child);
                     }
                 });
 
-                console.log('Modelo cargado con colisiones');
-            }, undefined, error => {
-                console.error('Error al cargar:', error);
-                document.getElementById('info').textContent = 'Error al cargar modelo';
-            });
+                console.log('Modelo cargado y objetos de colisión registrados:', collisionObjects);
+            },
+            undefined,
+            function(error) {
+                console.error('Error al cargar el modelo:', error);
+                document.getElementById('info').textContent = 'Error al cargar el modelo';
+            }
+        );
 
-            const ambientLight = new THREE.AmbientLight(0x404040);
-            scene.add(ambientLight);
+        const ambientLight = new THREE.AmbientLight(0x404040);
+        scene.add(ambientLight);
 
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(1, 1, 1).normalize();
-            scene.add(directionalLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(1, 1, 1).normalize();
+        scene.add(directionalLight);
 
-            window.addEventListener('resize', onWindowResize);
+        window.addEventListener('resize', onWindowResize);
+    }
 
-            // Inicializar caja del jugador
-            playerBox = new THREE.Box3();
+    function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function onKeyDown(event) {
+        switch (event.code) {
+            case 'ArrowUp':
+            case 'KeyW':
+                moveForward = true;
+                break;
+            case 'ArrowLeft':
+            case 'KeyA':
+                moveLeft = true;
+                break;
+            case 'ArrowDown':
+            case 'KeyS':
+                moveBackward = true;
+                break;
+            case 'ArrowRight':
+            case 'KeyD':
+                moveRight = true;
+                break;
+            case 'Space':
+                if (canJump === true) velocity.y += 0.25;
+                canJump = false;
+                break;
         }
+    }
 
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+    function onKeyUp(event) {
+        switch (event.code) {
+            case 'ArrowUp':
+            case 'KeyW':
+                moveForward = false;
+                break;
+            case 'ArrowLeft':
+            case 'KeyA':
+                moveLeft = false;
+                break;
+            case 'ArrowDown':
+            case 'KeyS':
+                moveBackward = false;
+                break;
+            case 'ArrowRight':
+            case 'KeyD':
+                moveRight = false;
+                break;
         }
+    }
 
-        function onKeyDown(event) {
-            switch (event.code) {
-                case 'KeyW': moveForward = true; break;
-                case 'KeyA': moveLeft = true; break;
-                case 'KeyS': moveBackward = true; break;
-                case 'KeyD': moveRight = true; break;
-                case 'Space':
-                    if (canJump) velocity.y += 0.25;
-                    canJump = false;
-                    break;
+    function animate() {
+        requestAnimationFrame(animate);
+
+        if (controls.isLocked === true) {
+            const delta = 0.1;
+            velocity.x -= velocity.x * 10.0 * delta;
+            velocity.z -= velocity.z * 10.0 * delta;
+
+            direction.z = Number(moveForward) - Number(moveBackward);
+            direction.x = Number(moveRight) - Number(moveLeft);
+            direction.normalize();
+
+            const raycaster = new THREE.Raycaster();
+            const collisionDistance = 0.5;
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+            raycaster.set(camera.position, forward);
+            const intersects = raycaster.intersectObjects(collisionObjects, true);
+
+            if (!(intersects.length > 0 && intersects[0].distance < collisionDistance)) {
+                if (moveForward || moveBackward) velocity.z -= direction.z * 5.0 * delta;
+                if (moveLeft || moveRight) velocity.x -= direction.x * 5.0 * delta;
+
+                controls.moveRight(-velocity.x * delta);
+                controls.moveForward(-velocity.z * delta);
             }
         }
 
-        function onKeyUp(event) {
-            switch (event.code) {
-                case 'KeyW': moveForward = false; break;
-                case 'KeyA': moveLeft = false; break;
-                case 'KeyS': moveBackward = false; break;
-                case 'KeyD': moveRight = false; break;
-            }
-        }
-
-        function checkCollisions() {
-            const playerSize = 0.5;
-            const pos = controls.getObject().position;
-
-            playerBox.set(
-                new THREE.Vector3(pos.x - playerSize/2, pos.y - playerSize/2, pos.z - playerSize/2),
-                new THREE.Vector3(pos.x + playerSize/2, pos.y + playerSize/2, pos.z + playerSize/2)
-            );
-
-            for (let i = 0; i < collisionBoxes.length; i++) {
-                if (playerBox.intersectsBox(collisionBoxes[i])) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        function animate() {
-            requestAnimationFrame(animate);
-
-            if (controls.isLocked === true) {
-                const delta = 0.1;
-                velocity.x -= velocity.x * 10.0 * delta;
-                velocity.z -= velocity.z * 10.0 * delta;
-
-                direction.z = Number(moveForward) - Number(moveBackward);
-                direction.x = Number(moveRight) - Number(moveLeft);
-                direction.normalize();
-
-                const moveX = -direction.x * 5.0 * delta;
-                const moveZ = -direction.z * 5.0 * delta;
-                const oldPos = controls.getObject().position.clone();
-
-                controls.moveRight(moveX);
-                if (checkCollisions()) controls.getObject().position.x = oldPos.x;
-
-                controls.moveForward(moveZ);
-                if (checkCollisions()) controls.getObject().position.z = oldPos.z;
-            }
-
-            renderer.render(scene, camera);
-        }
-    </script>
+        renderer.render(scene, camera);
+    }
+</script>
 </body>
 </html>
